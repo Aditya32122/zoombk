@@ -7,6 +7,12 @@ from urllib.parse import urlencode, parse_qs
 import secrets
 from typing import Optional
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Zoom Recordings API")
 
@@ -19,12 +25,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration - Replace with your actual credentials
+# Configuration - Updated to match the authorization URL credentials
 ZOOM_CONFIG = {
-    "client_id": "VhQRheNdSwKLc79wBLGJeA", 
-    "client_secret": "8WlYOsoHk6zNsociFvETLIHZ8bNR5bVj",
+    "client_id": "4Y94nKfWS6eSsj3anc9g5w", 
+    "client_secret": "8WlYOsoHk6zNsociFvETLIHZ8bNR5bVj",  # Make sure this is correct
     "base_url": "https://api.zoom.us/v2",
-    "redirect_uri": "http://127.0.0.1:8000/oauth/callback"  # Changed to match your server
+    "redirect_uri": "https://zoombk.onrender.com/oauth/callback"
 }
 
 # In-memory storage for demonstration (use database in production)
@@ -65,13 +71,17 @@ class ZoomOAuth:
             "redirect_uri": self.config["redirect_uri"]
         }
         
+        logger.info(f"Sending token exchange request to: {self.token_url}")
+        
         async with httpx.AsyncClient() as client:
             response = await client.post(self.token_url, headers=headers, data=data)
             
             if response.status_code != 200:
+                error_detail = response.text
+                logger.error(f"Token exchange failed: {error_detail}")
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Token exchange failed: {response.text}"
+                    detail=f"Token exchange failed: {error_detail}"
                 )
             
             return response.json()
@@ -199,9 +209,12 @@ async def oauth_login_simple():
         "response_type": "code",
         "client_id": ZOOM_CONFIG["client_id"],
         "redirect_uri": ZOOM_CONFIG["redirect_uri"],
-        # Removed scope parameter to match the requested URL
+        "scope": "recording:read user:read"  # Added scope which is required
     }
     auth_url = f"https://zoom.us/oauth/authorize?{urlencode(params)}"
+    
+    logger.info(f"Generated auth URL with client_id: {ZOOM_CONFIG['client_id']}")
+    logger.info(f"Complete auth URL: {auth_url}")
     
     return {
         "auth_url": auth_url,
@@ -217,7 +230,7 @@ async def oauth_callback(request: Request):
     state = query_params.get("state")
     error = query_params.get("error")
     
-    print(f"OAuth callback received - Code: {code}, State: {state}, Error: {error}")
+    logger.info(f"OAuth callback received - Code: {code}, State: {state}, Error: {error}")
     
     if error:
         raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
@@ -232,9 +245,13 @@ async def oauth_callback(request: Request):
         # Remove used state
         del oauth_states[state]
     else:
-        print("Warning: No state parameter received in callback")
+        logger.warning("No state parameter received in callback")
     
     try:
+        # Log request details for debugging
+        logger.info(f"Exchanging code for token with redirect_uri: {ZOOM_CONFIG['redirect_uri']}")
+        logger.info(f"Using client_id: {ZOOM_CONFIG['client_id']}")
+        
         # Exchange code for tokens
         token_data = await zoom_oauth.exchange_code_for_token(code)
         
@@ -258,6 +275,7 @@ async def oauth_callback(request: Request):
         }
         
     except Exception as e:
+        logger.error(f"OAuth callback exception: {str(e)}")
         raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
 
 @app.get("/recordings")
