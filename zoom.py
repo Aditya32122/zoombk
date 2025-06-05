@@ -206,15 +206,14 @@ async def oauth_login():
 @app.get("/oauth/login-simple")
 async def oauth_login_simple():
     """Initiate OAuth flow without state (for testing)"""
-    params = {
-        "response_type": "code",
-        "client_id": ZOOM_CONFIG["client_id"],
-        "redirect_uri": ZOOM_CONFIG["redirect_uri"],
-        "scope": "recording:read user:read"  # Added scope which is required
-    }
-    auth_url = f"https://zoom.us/oauth/authorize?{urlencode(params)}"
+    # Construct URL manually without encoding
+    client_id = ZOOM_CONFIG["client_id"]
+    redirect_uri = ZOOM_CONFIG["redirect_uri"]
     
-    logger.info(f"Generated auth URL with client_id: {ZOOM_CONFIG['client_id']}")
+    # Build exact URL format without urlencode
+    auth_url = f"https://zoom.us/oauth/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}"
+    
+    logger.info(f"Generated auth URL with client_id: {client_id}")
     logger.info(f"Complete auth URL: {auth_url}")
     
     return {
