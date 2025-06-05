@@ -28,7 +28,7 @@ app.add_middleware(
 # Configuration - Updated to match the authorization URL credentials
 ZOOM_CONFIG = {
     "client_id": "VhQRheNdSwKLc79wBLGJeA", 
-    "client_secret": "Q1HqS6X838gCWGvD76wrCm6uwzX1EQz0",  # Make sure this is correct
+    "client_secret": "8WlYOsoHk6zNsociFvETLIHZ8bNR5bVj",  # Make sure this is correct
     "base_url": "https://api.zoom.us/v2",
     "redirect_uri": "https://zoombk.onrender.com/oauth/callback"
 }
