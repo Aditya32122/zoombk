@@ -45,14 +45,15 @@ class ZoomOAuth:
     
     def get_auth_url(self, state: str) -> str:
         """Generate OAuth authorization URL"""
-        # Create base URL with non-encoded parameters
-        base_url = f"{self.auth_url}?response_type=code&client_id={self.config['client_id']}"
-        # Add redirect URI without encoding
-        base_url += f"&redirect_uri={self.config['redirect_uri']}"
-        # Add remaining parameters
-        base_url += f"&state={state}&scope=recording:read user:read"
-        
-        return base_url
+        # Build the URL manually to ensure proper formatting
+        auth_url = (
+            f"{self.auth_url}?response_type=code"
+            f"&client_id={self.config['client_id']}"
+            f"&redirect_uri={self.config['redirect_uri']}"
+            f"&state={state}"
+            f"&scope=recording:read user:read"
+        )
+        return auth_url
     
     async def exchange_code_for_token(self, code: str) -> dict:
         """Exchange authorization code for access token"""
