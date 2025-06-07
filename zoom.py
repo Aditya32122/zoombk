@@ -424,6 +424,10 @@ async def oauth_callback(request: Request):
         
     except Exception as e:
         logger.error(f"OAuth callback exception: {str(e)}")
+       # Find this section around line 449
+# Fixed version - create the error string first, then use it in the f-string
+        # Fixed version - create the error string first, then use it in the f-string
+        error_str = str(e).replace("'", "\\'")
         error_html = f"""
         <!DOCTYPE html>
         <html>
@@ -433,16 +437,16 @@ async def oauth_callback(request: Request):
                 if (window.opener) {{
                     window.opener.postMessage({{
                         type: 'ZOOM_AUTH_ERROR',
-                        error: '{str(e).replace("'", "\\'")}' 
+                        error: '{error_str}' 
                     }}, '*');
                     setTimeout(() => window.close(), 1000);
                 }} else {{
-                    window.location.href = "{FRONTEND_URL}?error={str(e)}";
+                    window.location.href = "{FRONTEND_URL}?error={error_str}";
                 }}
             </script>
         </head>
         <body>
-            <h3>Authentication failed: {str(e)}</h3>
+            <h3>Authentication failed: {error_str}</h3>
             <p>This window will close automatically...</p>
         </body>
         </html>
