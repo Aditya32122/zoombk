@@ -232,16 +232,93 @@ async def oauth_callback(request: Request):
     
     logger.info(f"OAuth callback received - Code: {code}, State: {state}, Error: {error}")
     
+    # Define the frontend URL for redirects if needed
+    FRONTEND_URL = "https://qtubechat-1731d.firebaseapp.com"  # Replace with your actual frontend URL
+    
     if error:
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+        # Return HTML that communicates error to parent window
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Failed</title>
+            <script>
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'ZOOM_AUTH_ERROR',
+                        error: '{error}'
+                    }}, '*');
+                    setTimeout(() => window.close(), 1000);
+                }} else {{
+                    window.location.href = "{FRONTEND_URL}?error={error}";
+                }}
+            </script>
+        </head>
+        <body>
+            <h3>Authentication failed: {error}</h3>
+            <p>This window will close automatically...</p>
+        </body>
+        </html>
+        """
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=error_html)
     
     if not code:
-        raise HTTPException(status_code=400, detail="Missing authorization code")
+        # Return HTML that communicates error to parent window
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Failed</title>
+            <script>
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'ZOOM_AUTH_ERROR',
+                        error: 'Missing authorization code'
+                    }}, '*');
+                    setTimeout(() => window.close(), 1000);
+                }} else {{
+                    window.location.href = "{FRONTEND_URL}?error=missing_code";
+                }}
+            </script>
+        </head>
+        <body>
+            <h3>Authentication failed: Missing authorization code</h3>
+            <p>This window will close automatically...</p>
+        </body>
+        </html>
+        """
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=error_html)
     
     # Verify state to prevent CSRF attacks (if provided)
     if state:
         if state not in oauth_states:
-            raise HTTPException(status_code=400, detail="Invalid state parameter")
+            error_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Failed</title>
+                <script>
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'ZOOM_AUTH_ERROR',
+                            error: 'Invalid state parameter'
+                        }}, '*');
+                        setTimeout(() => window.close(), 1000);
+                    }} else {{
+                        window.location.href = "{FRONTEND_URL}?error=invalid_state";
+                    }}
+                </script>
+            </head>
+            <body>
+                <h3>Authentication failed: Invalid state parameter</h3>
+                <p>This window will close automatically...</p>
+            </body>
+            </html>
+            """
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=error_html)
         # Remove used state
         del oauth_states[state]
     else:
@@ -267,17 +344,112 @@ async def oauth_callback(request: Request):
             "user_info": user_info
         }
         
-        return {
-            "message": "Authorization successful",
-            "user_id": user_id,
-            "user_email": user_info.get("email"),
-            "access_token": token_data["access_token"]  # In production, don't return this directly
-        }
+        # Return HTML that communicates success to parent window
+        success_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                    padding: 50px;
+                }}
+                .success {{
+                    color: #28a745;
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                }}
+            </style>
+            <script>
+                console.log("Auth successful, sending message to parent");
+                
+                function sendMessage() {{
+                    if (window.opener) {{
+                        try {{
+                            window.opener.postMessage({{
+                                type: 'ZOOM_AUTH_SUCCESS',
+                                userId: '{user_id}',
+                                userEmail: '{user_info.get("email", "")}',
+                                userName: '{user_info.get("first_name", "")} {user_info.get("last_name", "")}'
+                            }}, '*');
+                            console.log("Message sent to parent window");
+                            
+                            // Also set localStorage directly if possible
+                            try {{
+                                window.opener.localStorage.setItem('zoom_user_id', '{user_id}');
+                            }} catch(e) {{
+                                console.log("Couldn't set localStorage directly");
+                            }}
+                            
+                            setTimeout(() => window.close(), 2000);
+                        }} catch(e) {{
+                            console.error("Error sending message:", e);
+                            document.getElementById('manual').style.display = 'block';
+                        }}
+                    }} else {{
+                        console.log("No opener found");
+                        document.getElementById('manual').style.display = 'block';
+                    }}
+                }}
+                
+                // Try immediately and then retry after a short delay
+                sendMessage();
+                setTimeout(sendMessage, 500);
+                
+                // Close window after 5 seconds regardless
+                setTimeout(() => {{
+                    window.close();
+                }}, 5000);
+            </script>
+        </head>
+        <body>
+            <div class="success">✅ Authentication Successful!</div>
+            <p>Welcome, {user_info.get("first_name", "")} {user_info.get("last_name", "")}!</p>
+            <p>User ID: {user_id}</p>
+            <p>This window will close automatically...</p>
+            
+            <div id="manual" style="display: none; margin-top: 20px;">
+                <p>If the window doesn't close automatically:</p>
+                <button onclick="window.close()">Close Window</button>
+                <p>Or return to the app:</p>
+                <a href="{FRONTEND_URL}?zoom_user_id={user_id}" target="_top">Return to App</a>
+            </div>
+        </body>
+        </html>
+        """
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=success_html)
         
     except Exception as e:
         logger.error(f"OAuth callback exception: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
-
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Failed</title>
+            <script>
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'ZOOM_AUTH_ERROR',
+                        error: '{str(e).replace("'", "\\'")}' 
+                    }}, '*');
+                    setTimeout(() => window.close(), 1000);
+                }} else {{
+                    window.location.href = "{FRONTEND_URL}?error={str(e)}";
+                }}
+            </script>
+        </head>
+        <body>
+            <h3>Authentication failed: {str(e)}</h3>
+            <p>This window will close automatically...</p>
+        </body>
+        </html>
+        """
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=error_html)
+    
 @app.get("/recordings")
 async def get_recordings(user_id: str, from_date: Optional[str] = None, 
                         to_date: Optional[str] = None):
